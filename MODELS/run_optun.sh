@@ -12,7 +12,7 @@ MODELS=(
 )
 
 
-DATASET_NAME="VIC"
+DATASET_NAME="T"
 TARGET='Low,High'
 
 ROOT_PATH="$(dirname "$(dirname "$(realpath "$0")")")/dataset"
