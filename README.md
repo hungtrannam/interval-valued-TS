@@ -1,6 +1,6 @@
 # Interval-Valued Time Series Forecasting
 
-## Cấu trúc
+## 📁 Cấu trúc
 ```bash
 interval-valued-TS/
 ├── .github/workflows/        # Cấu hình CI/CD
@@ -12,7 +12,7 @@ interval-valued-TS/
 └── README.md                 # Hướng dẫn
 ```
 
-## Hướng dẫn
+## 📁 Hướng dẫn
 
 ```bash
 # Thiết lập môi trường python
