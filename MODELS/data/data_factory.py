@@ -1,13 +1,30 @@
+# -*- coding: utf-8 -*-
+"""
+@file   : data_factory.py
+@author : HUNG TRAN-NAM
+@contact: hung.trannam@vlu.edu.vn
+"""
+
 from data.data_loader import Dataset_Custom, Dataset_Pred
 from torch.utils.data import DataLoader
 
 data_dict = {
-    'custom': Dataset_Custom,
+    'custom': Dataset_Custom, # Custom dataset for user-defined data
 }
 
 
 def data_provider(args, flag):
+    """
+    Data provider function to create a dataset and data loader based on the provided arguments and flag.
+    Args:
+        args: Argument parser containing dataset parameters.
+        flag: A string indicating the type of data to load ('train', 'val', 'test', 'pred').
+    Returns:
+        data_set: An instance of the dataset class.
+        data_loader: A DataLoader instance for batching and loading the dataset.
+    """
     Data = data_dict[args.data]
+    # Determine time encoding based on the embedding type
     if args.embed == 'monthSine':
         timeenc = 2
     elif args.embed == 'timeF':
@@ -18,6 +35,7 @@ def data_provider(args, flag):
     drop_last = False
     freq = args.freq
     
+    # Set parameters based on the flag
     if flag == 'test':
         shuffle_flag = False
         drop_last = False
@@ -35,6 +53,7 @@ def data_provider(args, flag):
         batch_size = args.batch_size
         freq = args.freq
 
+    # Create the dataset instance
     data_set = Data(
         root_path=args.root_path,
         data_path=args.data_path,
@@ -48,10 +67,12 @@ def data_provider(args, flag):
         kfold=args.kfold,
     )
     print(flag, len(data_set))
+    # Create the DataLoader instance
     data_loader = DataLoader(
         data_set,
         batch_size=batch_size,
         shuffle=shuffle_flag,
         num_workers=args.num_workers,
         drop_last=drop_last)
+    
     return data_set, data_loader

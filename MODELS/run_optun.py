@@ -1,3 +1,10 @@
+# -- coding: utf-8 --
+"""
+@file   : run_optun.py
+@author : HUNG TRAN-NAM
+@contact:
+
+"""
 import argparse
 import optuna, optunahub
 import yaml
@@ -18,11 +25,10 @@ import time
 # Objective function for Optuna
 # ========================
 
-
 def objective(trial):
     parser = argparse.ArgumentParser()
 
-    # Basic Info
+    # General
     parser.add_argument('--task_name', type=str, default='short_term_forecast')
     parser.add_argument('--model_id', type=str, default='optuna_tune')
     parser.add_argument('--model', type=str, default=os.environ.get("MODEL_NAME", "Autoformer"))
@@ -40,17 +46,18 @@ def objective(trial):
                                     for l in [6, 12, 24, 36, 48]
                                     if s >= l and (s + l + 12) <= 96]
     seq_len, label_len = trial.suggest_categorical("seq_label_len", valid_seq_label_pairs)
+    parser.add_argument('--seq_len', type=int, default=seq_len)
+    parser.add_argument('--label_len', type=int, default=label_len)
     parser.add_argument('--moving_avg', default=3)
+
     parser.add_argument('--pred_len', type=int, default=12)
+
+
+    # Setting
     parser.add_argument(
         '--kfold', type=int, default=0,
         help='Number of folds for k-fold cross validation (0 = no k-fold, >=2 = use k-fold)'
     )
-    # Gán vào argparse
-    parser.add_argument('--seq_len', type=int, default=seq_len)
-    parser.add_argument('--label_len', type=int, default=label_len)
-
-
     parser.add_argument('--embed', type=str, default='timeF')
     parser.add_argument('--use_norm', type=int, default=1, help='whether to use normalize; True 1 False 0')
 
@@ -73,6 +80,7 @@ def objective(trial):
 
     # For bi-LSTM
     parser.add_argument('--bidirectional', default=True, action="store_true", help="Bidirectional LSTM")  #NEED
+
     # GPU
     parser.add_argument('--gpu', type=int, default=0, help='gpu')
     parser.add_argument('--gpu_type', type=str, default='cuda', help='gpu type')  # cuda or mps
@@ -130,7 +138,6 @@ def objective(trial):
     args.use_gpu = False
     args.gpu_type = 'cuda'
     args.gpu = 0
-    # args.batch_size = 8
     args.use_multi_gpu = False
     args.devices = '0,1,2,3'
 
@@ -151,10 +158,11 @@ def objective(trial):
         args.device_ids = [int(id_) for id_ in args.devices]
         args.gpu = args.device_ids[0]
     
+    # Create checkpoints directory
     exp = Exp_Main(args)
-
     setting = f"{args.model_id}_{args.data_path}_{args.model}_trial{trial.number}"
 
+    # Create a unique directory for this trial
     if args.kfold > 0:
         checkpoint_tmp = os.path.join(args.checkpoints, "tmp")
         val_losses = exp.train_kfold(
@@ -178,8 +186,11 @@ def objective(trial):
         return val_loss
 
 
-
+# ========================
+# Main function to run the optimization
+# ========================
 if __name__ == '__main__':
+    # Set up the Optuna study
     sampler = optuna.samplers.TPESampler(
         seed=42,
         multivariate=True,
@@ -200,15 +211,12 @@ if __name__ == '__main__':
         load_if_exists=True
     )
 
-   
-    # =======================
-    # Chose number of trials
-    # =======================
+    # NUM_TRIALS
     study.optimize(objective, n_trials=10, catch=(RuntimeError, ValueError, TypeError))
     print(">>>> FINISHED OPTIMIZATION <<<<")
 
+    # Save the study
     best_trial = study.best_trial
-
     print("Best Trial Result:")
     print(study.best_trial)
 
@@ -233,23 +241,17 @@ if __name__ == '__main__':
     parser.add_argument('--use_amp', action='store_true', default=False)
     parser.add_argument('--num_workers', type=int, default=5)
     parser.add_argument('--seg_len', type=int, default=24, help='segment length for SegRNN')
-    
-    # For bi-LSTM
     parser.add_argument('--bidirectional', default=True, action="store_true", help="Bidirectional LSTM")  #NEED
-
     parser.add_argument(
         '--kfold', type=int, default=0,
         help='Number of folds for k-fold cross validation (0 = no k-fold, >=2 = use k-fold)'
     )
-
     parser.add_argument('--pred_len', type=int, default=12)
     parser.add_argument('--moving_avg', default=3)
-    
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True)
     parser.add_argument('--use_norm', type=int, default=1, help='whether to use normalize; True 1 False 0')
-
     # GPU
     parser.add_argument('--use_gpu', type=bool, default=False)
     parser.add_argument('--gpu', type=int, default=0)
@@ -257,15 +259,16 @@ if __name__ == '__main__':
     parser.add_argument('--use_multi_gpu', action='store_true', default=False)
     parser.add_argument('--devices', type=str, default='0,1,2,3')
     parser.add_argument('--use_dtw', default=True)
-
     # TimesBlock / FEDformer / De-stationary models
     parser.add_argument('--seasonal_patterns', type=str, default='Monthly')
     parser.add_argument('embed', type=str)
     # Augment
     parser.add_argument('--seed', type=int, default=42)
 
+    # Fixed parameters
     args, _ = parser.parse_known_args()
     
+    # Update args with best trial parameters
     tmp_dir = os.path.join(args.checkpoints, "tmp")
     start_copy = time.time()
     if args.kfold > 0:
@@ -298,22 +301,18 @@ if __name__ == '__main__':
             print("[INFO] Copying checkpoint...")
             shutil.copy(tmp_file, final_path)
 
-
+    # copy and paste the best trial parameters
     start_rm = time.time()
     shutil.rmtree(tmp_dir, ignore_errors=True)
     print(f"[INFO] Removed tmp_dir in {time.time() - start_rm:.2f}s")
 
 
-
-
+    # Update args with best trial parameters
     best_params = best_trial.params
     args.__dict__.update(best_trial.params)
     args.__dict__.update(suggest_model_specific(best_trial, args.model))
-    # Không set best_fold
-
     args.seq_len, args.label_len = best_params['seq_label_len']
 
-    # Các giá trị cố định
     if args.embed == 'timeF':
         args.enc_in = 2
         args.dec_in = 2
@@ -321,31 +320,33 @@ if __name__ == '__main__':
         args.enc_in = 2+2
         args.dec_in = 2+2
     args.c_out = 2
-    # args.batch_size=8
     args.patience = 3
-
     args.inverse = True
     args.use_gpu = False
 
-    # Device
     if torch.cuda.is_available() and args.use_gpu:
         args.device = torch.device(f'cuda:{args.gpu}')
     else:
         args.device = torch.device('mps' if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() else 'cpu')
 
-    # Set seed
     set_seed(args.seed)
 
+
+
+    # =========================
+    # Run the experiment with the best parameters
+    # =========================
     print("Run experiment with best params and plot result")
     Exp = Exp_Main
     exp = Exp(args)
 
 
-    
+    # Check if the checkpoint directory exists, if not, create it
     if args.kfold > 0:
         setting = f"{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}"
         exp.train_kfold(setting, plot=True)
         for fold in range(args.kfold):
+            # Test each fold
             print(f"{'>'*50} Testing/Predicting {setting} {'<'*50}")
             exp.test(os.path.join(setting, f'fold{fold}'), test=1, plot=True)
 
@@ -353,6 +354,7 @@ if __name__ == '__main__':
         setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
         exp.train_standard(setting, plot=True)
         print(f"{'>'*50} Testing/Predicting {setting} {'<'*50}")
+        # Test the model
         exp.test(setting, test=1, plot=True)
 
 
@@ -364,6 +366,10 @@ if __name__ == '__main__':
 
     print(f"{'>'*50} Finish Experiments {setting} {'<'*50}")
 
+
+    # ========================
+    # Plotting results
+    # ========================
 
     # plot_input(dataset, save_path=f'./test_results/{setting}/INplot.pdf')
     dataset, train_loader = exp._get_data(flag='train')
@@ -387,7 +393,6 @@ if __name__ == '__main__':
                 yaml.dump({
                     'args': vars(args)
                 }, f, sort_keys=False)
-
     else:
         setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
 

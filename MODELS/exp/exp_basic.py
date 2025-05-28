@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+@file   : exp_main.py
+@author : HUNG TRAN-NAM
+@contact:
+"""
+
 import os
 import torch
 from models import DLinear, FEDformer, LSTM,\
@@ -5,7 +12,19 @@ from models import DLinear, FEDformer, LSTM,\
             GRU, Nonstationary_Transformer                
 
 
+# This is the base class for experiments in time series forecasting models.
 class Exp_Basic(object):
+    """
+    Base class for time series forecasting experiments.
+    This class provides a framework for building, training, validating, and testing time series models.
+    It initializes the model based on the provided arguments and sets the device for computation.
+    Attributes:
+        args: Argument parser containing model parameters.
+        model_dict: Dictionary mapping model names to their respective classes.
+        device: The device (CPU or GPU) on which the model will run.
+        model: The initialized model instance.
+    """
+    
     def __init__(self, args):
         self.args = args
         self.model_dict = {

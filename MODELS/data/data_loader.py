@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+@file   : data_loader.py
+@author : HUNG TRAN-NAM
+@contact:
+"""
+
 import os
 import pandas as pd
 from torch.utils.data import Dataset
@@ -17,9 +23,10 @@ class Dataset_Custom(Dataset):
         # Default sequence length settings
         self.embed = embed 
         self.seq_len, self.label_len, self.pred_len = size
-        self.kfold = kfold
-
         self.flag = flag
+
+        # Set type based on kfold and flag
+        self.kfold = kfold
         if self.kfold > 0:
             assert self.flag in ['train', 'test']
             type_map = {'train': 0, 'test': 1}
@@ -30,14 +37,20 @@ class Dataset_Custom(Dataset):
         self.set_type = type_map[self.flag]
 
         self.features = features
+
+        # Determine target interval
         if isinstance(target, str):
             self.target = [t.strip() for t in target.split(',')]
             print(self.target)
         else:
             self.target = target
+
+        # Scale the data if required
         self.scale = scale
         self.timeenc = timeenc
         self.freq = freq
+
+        # Set the root and data paths
         self.root_path = root_path
         self.data_path = data_path
 
@@ -62,7 +75,7 @@ class Dataset_Custom(Dataset):
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
-        # kfold hoặc standard split
+        # Handle kfold and set type
         if self.kfold == 0:
             n = len(df_raw)
             self.num_train = int(n * 0.8)

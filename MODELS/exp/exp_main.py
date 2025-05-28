@@ -23,8 +23,19 @@ from utils.losses import R2Loss
 
 warnings.filterwarnings('ignore')
 
-
+# This is the main experiment class for time series forecasting models.
 class Exp_Main(Exp_Basic):
+    """
+    Main class for time series forecasting experiments.
+    This class extends the Exp_Basic class and implements methods for building the model,
+    getting data, selecting the optimizer and criterion, training, validating, and testing the model.
+    It supports both k-fold cross-validation and standard training.
+    Attributes:
+        args: Argument parser containing model parameters.
+        model_dict: Dictionary mapping model names to their respective classes.
+        device: The device (CPU or GPU) on which the model will run.
+        model: The initialized model instance.
+    """
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
 
@@ -50,6 +61,15 @@ class Exp_Main(Exp_Basic):
  
 
     def vali(self, vali_data, vali_loader, criterion):
+        """
+        Validate the model on the validation dataset.
+        Args:
+            vali_data: Validation dataset.
+            vali_loader: DataLoader for the validation dataset.
+            criterion: Loss function to evaluate the model's performance.
+        Returns:
+            avg_loss: Average validation loss.
+        """
         total_loss = []
         self.model.eval()
         with torch.no_grad():
@@ -93,6 +113,14 @@ class Exp_Main(Exp_Basic):
         return avg_loss
 
     def train(self, setting, plot=True):
+        """
+        Train the model based on the specified setting.
+        Args:
+            setting: A string indicating the training setting (e.g., 'kfold', 'standard').
+            plot: A boolean indicating whether to plot the training and validation losses.
+        Returns:
+            val_losses: A list of validation losses for each fold if k-fold is used, or the final validation loss if standard training is used.
+        """
         if self.args.kfold > 0:
             return self.train_kfold(setting, plot=plot)
         elif self.args.kfold == 0:
@@ -100,11 +128,19 @@ class Exp_Main(Exp_Basic):
 
 
     def train_kfold(self, setting, plot=True, checkpoint_base="./checkpoints/tmp"):
-        
+        """
+        Train the model using k-fold cross-validation.
+        Args:
+            setting: A string indicating the training setting (e.g., 'kfold').
+            plot: A boolean indicating whether to plot the training and validation losses.
+            checkpoint_base: Base directory for saving checkpoints.
+        Returns:
+            val_losses: A list of validation losses for each fold.
+        """
         model_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         logging.info(f"[MODEL] Trainable parameters: {model_params:,}")
         
-
+        # Get training, validation, and test data loaders
         train_data, train_loader = self._get_data(flag='train')
         test_data, test_loader = self._get_data(flag='test')
 
@@ -114,6 +150,7 @@ class Exp_Main(Exp_Basic):
 
         val_losses = []
         
+        # If using k-fold, we need to split the dataset into k folds
         for fold, (train_idx, val_idx) in enumerate(tscv.split(indices)):
             
             fold_start = time.time()  # <-- Đo thời gian riêng từng fold
@@ -128,10 +165,10 @@ class Exp_Main(Exp_Basic):
             train_loader = torch.utils.data.DataLoader(train_subset, batch_size=self.args.batch_size, shuffle=False)
             vali_loader = torch.utils.data.DataLoader(vali_data, batch_size=self.args.batch_size, shuffle=False)
 
-            print(f"[INFO] Dataset Shapes:")
-            print(f"  ➤ Train set  : {len(train_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in train_loader][0]}")
-            print(f"  ➤ Val set    : {len(vali_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in vali_loader][0]}")
-            print(f"  ➤ Test set   : {len(test_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in test_loader][0]}")
+            # print(f"[INFO] Dataset Shapes:")
+            # print(f"  ➤ Train set  : {len(train_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in train_loader][0]}")
+            # print(f"  ➤ Val set    : {len(vali_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in vali_loader][0]}")
+            # print(f"  ➤ Test set   : {len(test_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in test_loader][0]}")
 
             time_now = time.time()
 
@@ -145,9 +182,10 @@ class Exp_Main(Exp_Basic):
                 os.makedirs(path, exist_ok=True)
                 best_model_path = os.path.join(path, 'checkpoint.pth')
             
+            # Early stopping to prevent overfitting
             early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
             
-            
+            # Select optimizer and learning rate scheduler
             model_optim = self._select_optimizer()
             if self.args.lradj == 'type3':
                 scheduler = ReduceLROnPlateau(
@@ -170,7 +208,8 @@ class Exp_Main(Exp_Basic):
 
             train_losses_this_fold = []
             val_losses_this_fold = []
-
+            
+            # Training loop for each fold
             for epoch in range(self.args.train_epochs):
                 iter_count = 0
                 train_loss = []
@@ -224,6 +263,7 @@ class Exp_Main(Exp_Basic):
                         loss = loss_lower + loss_upper
                         train_loss.append(loss.item())
 
+                    # Log training progress
                     if (i + 1) % 100 == 0:
                         print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                         speed = (time.time() - time_now) / iter_count
@@ -237,6 +277,7 @@ class Exp_Main(Exp_Basic):
                         scaler.step(model_optim)
                         scaler.update()
                     else:
+                        # Backward and optimize
                         loss.backward()
                         model_optim.step()
 
@@ -250,6 +291,7 @@ class Exp_Main(Exp_Basic):
                 print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} | Vali Loss: {3:.7f} | Test Loss: {3:.7f}".format(
                     epoch + 1, train_steps, train_loss, vali_loss, test_loss))
 
+                # Early stopping based on validation loss
                 early_stopping(vali_loss, self.model, best_model_path)
 
                 if early_stopping.early_stop:
@@ -275,28 +317,16 @@ class Exp_Main(Exp_Basic):
         return val_losses
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def train_standard(self, setting, plot=True,  checkpoint_base="./checkpoints/tmp"):
-            
+        """
+        Train the model using standard training procedure.
+        Args:
+            setting: A string indicating the training setting (e.g., 'standard').
+            plot: A boolean indicating whether to plot the training and validation losses.
+            checkpoint_base: Base directory for saving checkpoints.
+        Returns:
+            val_loss: The final validation loss after training.
+        """
         model_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         logging.info(f"[MODEL] Trainable parameters: {model_params:,}")
         
@@ -304,10 +334,10 @@ class Exp_Main(Exp_Basic):
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
-        print(f"[INFO] Dataset Shapes:")
-        print(f"  ➤ Train set  : {len(train_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in train_loader][0]}")
-        print(f"  ➤ Val set    : {len(vali_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in vali_loader][0]}")
-        print(f"  ➤ Test set   : {len(test_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in test_loader][0]}")
+        # print(f"[INFO] Dataset Shapes:")
+        # print(f"  ➤ Train set  : {len(train_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in train_loader][0]}")
+        # print(f"  ➤ Val set    : {len(vali_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in vali_loader][0]}")
+        # print(f"  ➤ Test set   : {len(test_loader)} batches, each with shape {[batch_x.shape for (batch_x, _, _, _) in test_loader][0]}")
 
         time_now = time.time()
 
@@ -321,8 +351,10 @@ class Exp_Main(Exp_Basic):
             os.makedirs(path, exist_ok=True)
             best_model_path = os.path.join(path, 'checkpoint.pth')
         
+        # Early stopping to prevent overfitting
         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
 
+        # Select optimizer and learning rate scheduler
         model_optim = self._select_optimizer()
         if self.args.lradj == 'type3':
             scheduler = ReduceLROnPlateau(
@@ -347,6 +379,7 @@ class Exp_Main(Exp_Basic):
         train_losses = []
         val_losses, val_mses = [], []
 
+        # Training loop
         for epoch in range(self.args.train_epochs):
             iter_count = 0
             train_loss = []
@@ -413,6 +446,7 @@ class Exp_Main(Exp_Basic):
                     scaler.step(model_optim)
                     scaler.update()
                 else:
+                    # Backward pass and optimization
                     loss.backward()
                     model_optim.step()
 
@@ -450,13 +484,16 @@ class Exp_Main(Exp_Basic):
 
 
 
-
-
-
-
-
-
     def test(self, setting, test=0, plot=True):
+        """
+        Test the model on the test dataset.
+        Args:
+            setting: A string indicating the testing setting (e.g., 'kfold', 'standard').
+            test: An integer indicating whether to load a pre-trained model (1) or not (0).
+            plot: A boolean indicating whether to plot the test results.
+        Returns:
+            None
+        """
         start_time = time.time()
 
         test_data, test_loader = self._get_data(flag='test')
@@ -545,7 +582,8 @@ class Exp_Main(Exp_Basic):
             dtw = np.array(dtw_list).mean()
         else:
             dtw = 'Not calculated'
-
+        
+        # Save results
         if plot:
             folder_path = './results/' + setting + '/'
             os.makedirs(folder_path, exist_ok=True)
