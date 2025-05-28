@@ -15,9 +15,14 @@ interval-valued-TS/
 ## 📁 Hướng dẫn
 
 ```bash
-# Thiết lập môi trường python
+# Thiết lập môi trường python (Linux)
 bash builtEnv.sh
 source .venv/bin/activate
+```
+
+hoặc # Thiết lập môi trường python (Windows)
+```bash
+pip install -r requirements.txt
 ```
 
 ### Huấn luyện mô hình
