@@ -40,17 +40,17 @@ def objective(trial):
     parser.add_argument('--data_path', type=str, default='pre_ChiangSaen_spi_6.csv')
     parser.add_argument('--target', type=str, default='spi_6')
     parser.add_argument('--features', type=str, default='MS')
-    parser.add_argument('--freq', type=str, default='m')
+    parser.add_argument('--freq', type=str, default='w')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/')
-    valid_seq_label_pairs = [(s, l) for s in [24, 36, 48, 60, 72, 84]
-                                    for l in [6, 12, 24, 36, 48]
-                                    if s >= l and (s + l + 12) <= 96]
+    valid_seq_label_pairs = [(s, l) for s in [52, 104, 168, 224]
+                                    for l in [32, 52, 104]
+                                    if s >= l]
     seq_len, label_len = trial.suggest_categorical("seq_label_len", valid_seq_label_pairs)
     parser.add_argument('--seq_len', type=int, default=seq_len)
     parser.add_argument('--label_len', type=int, default=label_len)
     parser.add_argument('--moving_avg', default=3)
 
-    parser.add_argument('--pred_len', type=int, default=12)
+    parser.add_argument('--pred_len', type=int, default=52)
 
 
     # Setting
@@ -231,7 +231,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default='pre_ChiangSaen_spi_6.csv')
     parser.add_argument('--target', type=str, default='spi_6')
     parser.add_argument('--features', type=str, default='MS')
-    parser.add_argument('--freq', type=str, default='m')
+    parser.add_argument('--freq', type=str, default='w')
     parser.add_argument('--num_kernels', type=int, default=6, help='for Inception')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/')
     parser.add_argument('--loss', type=str, default='MSE')
@@ -246,7 +246,7 @@ if __name__ == '__main__':
         '--kfold', type=int, default=0,
         help='Number of folds for k-fold cross validation (0 = no k-fold, >=2 = use k-fold)'
     )
-    parser.add_argument('--pred_len', type=int, default=12)
+    parser.add_argument('--pred_len', type=int, default=52)
     parser.add_argument('--moving_avg', default=3)
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',

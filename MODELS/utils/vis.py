@@ -208,72 +208,6 @@ def plot_loss(train_losses=None, val_losses=None, name='./pic/loss.pdf'):
     print(f"Saved loss curve at {name}")
     plt.close()
 
-def plot_scatter_truth_vs_pred(y_true, y_pred, save_path='./PredScatter.pdf'):
-    from sklearn.linear_model import LinearRegression
-    from sklearn.metrics import r2_score
-    from utils.metrics import metric
-
-    set_plot_style()
-
-    # Tính metrics
-    mae, mse, rmse, mape, mspe, nse = metric(y_pred, y_true)
-
-    y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
-
-    # Reshape toàn bộ để fit đường hồi quy
-    y_true_flat = y_true.flatten().reshape(-1, 1)
-    y_pred_flat = y_pred.flatten().reshape(-1, 1)
-
-    # Fit đường hồi quy tuyến tính
-    reg = LinearRegression().fit(y_true_flat, y_pred_flat)
-    y_fit = reg.predict(y_true_flat)
-    r2 = r2_score(y_true_flat, y_pred_flat)
-
-    num_batches = y_true.shape[0]
-    colors = cm.get_cmap('viridis', num_batches)
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-
-    # Vẽ scatter từng batch
-    for i in range(num_batches):
-        ax.scatter(
-            y_true[i].flatten(), 
-            y_pred[i].flatten(), 
-            alpha=0.5, 
-            color=colors(i),
-            label=f'Batch {i+1}'
-        )
-
-    # Đường phân giác y = x
-    min_val = min(y_true.min(), y_pred.min())
-    max_val = max(y_true.max(), y_pred.max())
-    ax.plot([min_val, max_val], [min_val, max_val], 'r--', label='Ideal Prediction')
-
-    # Đường hồi quy
-    ax.plot(y_true_flat, y_fit, color='black', linewidth=2, label=f'Fit Line (R²={r2:.4f})')
-
-    # Ghi chú các metric
-    ax.annotate(
-        f'MAE:  {mae:.4f}\n'
-        f'MSE:  {mse:.4f}\n'
-        f'RMSE: {rmse:.4f}\n'
-        f'MAPE: {mape:.2f}%\n'
-        f'MSPE: {mspe:.2f}%\n'
-        f'NSE:  {nse:.4f}\n',
-        xy=(0.05, 0.95), xycoords='axes fraction',
-        ha='left', va='top',
-        fontsize=10,
-    )
-
-    ax.set_xlabel('Observed')
-    ax.set_ylabel('Forecasted')
-    # ax.set_title('Prediction vs Ground Truth')
-    # ax.legend(loc='lower right', fontsize=9)
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
-
 
 def plot_optimization_history(study, save_dir):
     set_plot_style()
@@ -283,4 +217,92 @@ def plot_optimization_history(study, save_dir):
     fig.figure.savefig(os.path.join(save_dir, 'OptHistory.pdf'))
     print(f"Saved Hyperparameter Importance at {save_dir}/OptHistory.pdf")
     plt.tight_layout()
+    plt.close()
+
+def plot_scatter_truth_vs_pred(y_true, y_pred, save_path='./PredScatter.pdf'):
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import r2_score
+    from utils.metrics import metric
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import matplotlib.cm as cm
+
+    set_plot_style()
+
+    # Tính metrics tổng thể
+    mae0, mse0, rmse0, mape0, mspe0, nse0 = metric(y_pred[..., 0], y_true[..., 0])
+    mae1, mse1, rmse1, mape1, mspe1, nse1 =  metric(y_pred[..., 1], y_true[..., 1])
+
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    titles = ['Low', 'High']
+    components = [0, 1]
+
+    for ax, comp_idx, title in zip(axes, components, titles):
+        y_true_comp = y_true[..., comp_idx]
+        y_pred_comp = y_pred[..., comp_idx]
+
+        y_true_flat = y_true_comp.flatten().reshape(-1, 1)
+        y_pred_flat = y_pred_comp.flatten().reshape(-1, 1)
+
+        # Hồi quy tuyến tính
+        reg = LinearRegression().fit(y_true_flat, y_pred_flat)
+        y_fit = reg.predict(y_true_flat)
+        r2 = r2_score(y_true_flat, y_pred_flat)
+
+        # Màu theo batch
+        num_batches = y_true.shape[0]
+        colors = cm.get_cmap('viridis', num_batches)
+
+        for i in range(num_batches):
+            ax.scatter(
+                y_true_comp[i].flatten(),
+                y_pred_comp[i].flatten(),
+                alpha=0.5,
+                color=colors(i),
+                label=f'Batch {i+1}' if i < 10 else None  # tránh legend quá dài
+            )
+
+        min_val = min(y_true_comp.min(), y_pred_comp.min())
+        max_val = max(y_true_comp.max(), y_pred_comp.max())
+        ax.plot([min_val, max_val], [min_val, max_val], 'r--', label='Ideal')
+
+        ax.plot(y_true_flat, y_fit, color='black', linewidth=2, label=f'Fit (R²={r2:.4f})')
+
+        ax.set_xlabel('Observed')
+        ax.set_ylabel('Forecasted')
+        ax.set_title(f'{title} Values')
+        ax.legend(loc='lower right', fontsize=8)
+
+        # Ghi metric trên subplot "Low"
+        if comp_idx == 0:
+            ax.annotate(
+                f'MAE:  {mae0:.4f}\n'
+                f'MSE:  {mse0:.4f}\n'
+                f'RMSE: {rmse0:.4f}\n'
+                f'MAPE: {mape0:.2f}%\n'
+                f'MSPE: {mspe0:.2f}%\n'
+                f'NSE:  {nse0:.4f}\n',
+                xy=(0.05, 0.95), xycoords='axes fraction',
+                ha='left', va='top',
+                fontsize=10,
+            )
+                # Ghi metric trên subplot "Low"
+        if comp_idx == 1:
+            ax.annotate(
+                f'MAE:  {mae1:.4f}\n'
+                f'MSE:  {mse1:.4f}\n'
+                f'RMSE: {rmse1:.4f}\n'
+                f'MAPE: {mape1:.2f}%\n'
+                f'MSPE: {mspe1:.2f}%\n'
+                f'NSE:  {nse1:.4f}\n',
+                xy=(0.05, 0.95), xycoords='axes fraction',
+                ha='left', va='top',
+                fontsize=10,
+            )
+
+    plt.tight_layout()
+    plt.savefig(save_path)
     plt.close()

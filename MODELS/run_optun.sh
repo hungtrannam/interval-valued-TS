@@ -5,14 +5,14 @@ set -e
 
 #  Autoformer, FEDformer, LSTM, PatchTST, TimeNet, DLinear, Nonstationary_Transformer
 MODELS=(
-# 'LSTM'
-'DLinear'
+'LSTM'
+# 'DLinear'
 # 'FEDformer'
 # Nonstationary_Transformer
 )
 
 
-DATASET_NAME="T"
+DATASET_NAME="Temp"
 TARGET='Low,High'
 
 ROOT_PATH="$(dirname "$(dirname "$(realpath "$0")")")/dataset"
