@@ -5,8 +5,8 @@ set -e
 
 #  Autoformer, FEDformer, LSTM, PatchTST, TimeNet, DLinear, Nonstationary_Transformer
 MODELS=(
-'LSTM'
-# 'DLinear'
+# 'LSTM'
+'DLinear'
 # 'FEDformer'
 # Nonstationary_Transformer
 )

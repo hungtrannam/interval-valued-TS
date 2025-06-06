@@ -42,20 +42,23 @@ def objective(trial):
     parser.add_argument('--features', type=str, default='MS')
     parser.add_argument('--freq', type=str, default='w')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/')
-    valid_seq_label_pairs = [(s, l) for s in [52, 104, 168, 224]
-                                    for l in [32, 52, 104]
-                                    if s >= l]
+    valid_seq_label_pairs = [
+        (s, l) for s in [52, 104, 208, 426]
+                for l in [8, 16, 22, 32, 48, 52]
+        if s >= l
+    ]
+
     seq_len, label_len = trial.suggest_categorical("seq_label_len", valid_seq_label_pairs)
     parser.add_argument('--seq_len', type=int, default=seq_len)
     parser.add_argument('--label_len', type=int, default=label_len)
-    parser.add_argument('--moving_avg', default=3)
+    parser.add_argument('--moving_avg', default=1)
 
     parser.add_argument('--pred_len', type=int, default=52)
 
 
     # Setting
     parser.add_argument(
-        '--kfold', type=int, default=0,
+        '--kfold', type=int, default=5,
         help='Number of folds for k-fold cross validation (0 = no k-fold, >=2 = use k-fold)'
     )
     parser.add_argument('--embed', type=str, default='timeF')
@@ -63,9 +66,9 @@ def objective(trial):
 
 
     # Learning
-    parser.add_argument('--dropout', type=float, default=trial.suggest_float('dropout', 0.0, 0.4))
+    parser.add_argument('--dropout', type=float, default=trial.suggest_float('dropout', 0.0, 0.6))
     parser.add_argument('--lradj', type=str, default=trial.suggest_categorical('lradj', ['type1', 'type2', 'type3']), help='adjust learning rate')
-    parser.add_argument('--learning_rate', type=float, default=trial.suggest_float('learning_rate', 1e-5, 1e-3, log=True))
+    parser.add_argument('--learning_rate', type=float, default=trial.suggest_float('learning_rate', 1e-6, 1e-3, log=True))
     parser.add_argument('--num_kernels', type=int, default=6, help='for Inception')
     parser.add_argument('--activation', type=str, default=trial.suggest_categorical('activation', ['relu', 'silu', 'gelu']), help='activation function')
 
@@ -167,9 +170,10 @@ def objective(trial):
         checkpoint_tmp = os.path.join(args.checkpoints, "tmp")
         val_losses = exp.train_kfold(
             setting,
-            plot=False,
             checkpoint_base=checkpoint_tmp
         )
+        best_fold = int(np.argmin(val_losses))
+        trial.set_user_attr("best_fold", best_fold)
         trial.set_user_attr("val_losses", val_losses)
 
         median_val_loss = np.median(val_losses)
@@ -182,8 +186,12 @@ def objective(trial):
 
     else:
         checkpoint_tmp = os.path.join(args.checkpoints, "tmp")
-        val_loss = exp.train_standard(setting, plot=False, checkpoint_base=checkpoint_tmp)
+        val_loss = exp.train_standard(
+            setting, checkpoint_base=checkpoint_tmp
+        )
+
         return val_loss
+
 
 
 # ========================
@@ -212,7 +220,7 @@ if __name__ == '__main__':
     )
 
     # NUM_TRIALS
-    study.optimize(objective, n_trials=10, catch=(RuntimeError, ValueError, TypeError))
+    study.optimize(objective, n_trials=3, catch=(RuntimeError, ValueError, TypeError))
     print(">>>> FINISHED OPTIMIZATION <<<<")
 
     # Save the study
@@ -243,11 +251,12 @@ if __name__ == '__main__':
     parser.add_argument('--seg_len', type=int, default=24, help='segment length for SegRNN')
     parser.add_argument('--bidirectional', default=True, action="store_true", help="Bidirectional LSTM")  #NEED
     parser.add_argument(
-        '--kfold', type=int, default=0,
+        '--kfold', type=int, default=5,
         help='Number of folds for k-fold cross validation (0 = no k-fold, >=2 = use k-fold)'
     )
     parser.add_argument('--pred_len', type=int, default=52)
-    parser.add_argument('--moving_avg', default=3)
+    parser.add_argument('--moving_avg', default=1)
+
     parser.add_argument('--distil', action='store_false',
                         help='whether to use distilling in encoder, using this argument means not using distilling',
                         default=True)
@@ -267,39 +276,19 @@ if __name__ == '__main__':
 
     # Fixed parameters
     args, _ = parser.parse_known_args()
-    
-    # Update args with best trial parameters
     tmp_dir = os.path.join(args.checkpoints, "tmp")
+    setting_name = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
+    tmp_setting_dir = os.path.join(tmp_dir, setting_name)
+    final_setting_dir = os.path.join(args.checkpoints, setting_name)
+
     start_copy = time.time()
-    if args.kfold > 0:
-        for fold in range(args.kfold):
-            tmp_file = os.path.join(
-                tmp_dir,
-                f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}', f'fold{fold}.pth'
-            )
-            final_path = os.path.join(
-                args.checkpoints,
-                f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}', f'fold{fold}', 'checkpoint.pth'
-            )
-            if os.path.exists(tmp_file):
-                os.makedirs(os.path.dirname(final_path), exist_ok=True)
-                print(f"[INFO] Copying fold {fold} checkpoint...")
-                fold_start = time.time()
-                shutil.copy(tmp_file, final_path)
-                print(f"[INFO] Fold {fold} copied in {time.time() - fold_start:.2f}s")
+    if os.path.exists(tmp_setting_dir):
+        print(f"[INFO] Copying full directory for best trial: {setting_name}")
+        shutil.copytree(tmp_setting_dir, final_setting_dir, dirs_exist_ok=True)
+        print(f"[INFO] Copied in {time.time() - start_copy:.2f}s")
     else:
-        tmp_file = os.path.join(
-            tmp_dir,
-            f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}', f'checkpoint.pth'
-        )
-        final_path = os.path.join(
-            args.checkpoints,
-            f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}', 'checkpoint.pth'
-        )
-        if os.path.exists(tmp_file):
-            os.makedirs(os.path.dirname(final_path), exist_ok=True)
-            print("[INFO] Copying checkpoint...")
-            shutil.copy(tmp_file, final_path)
+        print(f"[WARNING] Temp directory {tmp_setting_dir} does not exist!")
+
 
     # copy and paste the best trial parameters
     start_rm = time.time()
@@ -343,19 +332,25 @@ if __name__ == '__main__':
 
     # Check if the checkpoint directory exists, if not, create it
     if args.kfold > 0:
+        best_fold = best_trial.user_attrs["best_fold"]
         setting = f"{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}"
-        exp.train_kfold(setting, plot=True)
-        for fold in range(args.kfold):
-            # Test each fold
-            print(f"{'>'*50} Testing/Predicting {setting} {'<'*50}")
-            exp.test(os.path.join(setting, f'fold{fold}'), test=1, plot=True)
-
-    elif args.kfold == 0:
-        setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
-        exp.train_standard(setting, plot=True)
+        fold_dir = os.path.join(setting, f"fold{best_fold}")
         print(f"{'>'*50} Testing/Predicting {setting} {'<'*50}")
-        # Test the model
-        exp.test(setting, test=1, plot=True)
+        exp.test(fold_dir, test=1, plot=True)
+        train_losses = np.load(f"./checkpoints/{setting}/train_losses_{best_fold}.npy", allow_pickle=True)
+        val_losses   = np.load(f"./checkpoints/{setting}/vali_losses_{best_fold}.npy", allow_pickle=True)
+        plot_path = f"./test_results/{setting}/fold{best_fold}/loss.pdf"
+        plot_loss(train_losses, val_losses, name=plot_path)
+
+    else:
+        setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
+
+        print(f"{'>'*50} Testing/Predicting {setting} {'<'*50}")
+        exp.test(os.path.join(setting, f'checkpoint'), test=1, plot=True)
+
+        train_losses = np.load(f"./checkpoints/{setting}/train_losses.npy", allow_pickle=True)
+        val_losses   = np.load(f"./checkpoints/{setting}/vali_losses.npy", allow_pickle=True)
+        plot_loss(train_losses, val_losses, name=f"./test_results/{setting}/loss.pdf")
 
 
     # Clean GPU Cache
@@ -378,21 +373,20 @@ if __name__ == '__main__':
     plot_optimization_history(study, './test_results/' + setting)
 
     if args.kfold > 0:
-        for fold in range(args.kfold):
-            setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}/fold{fold}'
+        setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}/fold{best_fold}'
 
-            y_true = np.load(f'./results/{setting}/true.npy')
-            y_pred = np.load(f'./results/{setting}/pred.npy')
+        y_true = np.load(f'./results/{setting}/true.npy')
+        y_pred = np.load(f'./results/{setting}/pred.npy')
 
-            plot_scatter_truth_vs_pred(y_true, y_pred, save_path=f'./test_results/{setting}/PredScatter.pdf')
-            # plot_residual_acf(y_true, y_pred, save_path=f'./test_results/{setting}/ACF.pdf')
+        plot_scatter_truth_vs_pred(y_true, y_pred, save_path=f'./test_results/{setting}/PredScatter.pdf')
+        # plot_residual_acf(y_true, y_pred, save_path=f'./test_results/{setting}/ACF.pdf')
 
-            args_save_path = f'./test_results/{setting}/best.yaml'
-            args_dict = vars(args)
-            with open(args_save_path, 'w') as f:
-                yaml.dump({
-                    'args': vars(args)
-                }, f, sort_keys=False)
+        args_save_path = f'./test_results/{setting}/best.yaml'
+        args_dict = vars(args)
+        with open(args_save_path, 'w') as f:
+            yaml.dump({
+                'args': vars(args)
+            }, f, sort_keys=False)
     else:
         setting = f'{args.model_id}_{args.data_path}_{args.model}_trial{best_trial.number}'
 

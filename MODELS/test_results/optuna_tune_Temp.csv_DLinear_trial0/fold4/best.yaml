@@ -19,9 +19,9 @@ args:
   num_workers: 5
   seg_len: 24
   bidirectional: true
-  kfold: 0
+  kfold: 5
   pred_len: 52
-  moving_avg: 3
+  moving_avg: 1
   distil: true
   use_norm: 1
   use_gpu: false
@@ -34,21 +34,21 @@ args:
   embed: timeF
   seed: 42
   seq_label_len: !!python/tuple
-  - 224
-  - 32
-  dropout: 0.010223050453432234
+  - 104
+  - 52
+  dropout: 0.27364199053022153
   lradj: type1
-  learning_rate: 0.00014182636704133773
+  learning_rate: 5.987474910461405e-05
   activation: silu
   batch_size: 8
-  d_model: 32
+  d_model: 8
   n_heads: 4
-  e_layers: 1
-  d_layers: 6
-  d_ff: 64
+  e_layers: 8
+  d_layers: 3
+  d_ff: 8
   factor: 3
-  seq_len: 224
-  label_len: 32
+  seq_len: 104
+  label_len: 52
   enc_in: 2
   dec_in: 2
   c_out: 2

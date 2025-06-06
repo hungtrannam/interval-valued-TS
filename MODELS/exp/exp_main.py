@@ -127,7 +127,7 @@ class Exp_Main(Exp_Basic):
             return self.train_standard(setting, plot=plot)
 
 
-    def train_kfold(self, setting, plot=True, checkpoint_base="./checkpoints/tmp"):
+    def train_kfold(self, setting, checkpoint_base="./checkpoints/tmp"):
         """
         Train the model using k-fold cross-validation.
         Args:
@@ -149,7 +149,6 @@ class Exp_Main(Exp_Basic):
         tscv = TimeSeriesSplit(n_splits=self.args.kfold)
 
         val_losses = []
-        
         # If using k-fold, we need to split the dataset into k folds
         for fold, (train_idx, val_idx) in enumerate(tscv.split(indices)):
             
@@ -208,6 +207,7 @@ class Exp_Main(Exp_Basic):
 
             train_losses_this_fold = []
             val_losses_this_fold = []
+
             
             # Training loop for each fold
             for epoch in range(self.args.train_epochs):
@@ -301,12 +301,8 @@ class Exp_Main(Exp_Basic):
                 adjust_learning_rate(model_optim, epoch + 1, self.args, scheduler, vali_loss)
             
             self.model.load_state_dict(torch.load(best_model_path))
-
-            if plot:
-                self.model.load_state_dict(torch.load(best_model_path))
-                folder_path = os.path.join('./test_results', setting, f'fold{fold}')
-                os.makedirs(folder_path, exist_ok=True)
-                plot_loss(train_losses_this_fold, val_losses_this_fold, name=os.path.join(folder_path, 'loss.pdf'))
+            np.save(os.path.join(checkpoint_base, f"{setting}", f"train_losses_{fold}.npy"), train_losses_this_fold)
+            np.save(os.path.join(checkpoint_base, f"{setting}", f"vali_losses_{fold}.npy"), val_losses_this_fold)
 
             fold_time = time.time() - fold_start
             peak_mem = torch.cuda.max_memory_allocated() / 1024 / 1024  # MiB
@@ -317,7 +313,8 @@ class Exp_Main(Exp_Basic):
         return val_losses
 
 
-    def train_standard(self, setting, plot=True,  checkpoint_base="./checkpoints/tmp"):
+
+    def train_standard(self, setting, checkpoint_base="./checkpoints/tmp"):
         """
         Train the model using standard training procedure.
         Args:
@@ -456,6 +453,8 @@ class Exp_Main(Exp_Basic):
             test_loss = self.vali(test_data, test_loader, criterion)
             train_losses.append(train_loss)
             val_losses.append(vali_loss)
+            np.save(os.path.join(checkpoint_base, f"{setting}", "train_losses.npy"), train_losses)
+            np.save(os.path.join(checkpoint_base, f"{setting}", "vali_losses.npy"), val_losses)
 
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
@@ -469,18 +468,13 @@ class Exp_Main(Exp_Basic):
 
         self.model.load_state_dict(torch.load(best_model_path))
         
-        if plot:
-            self.model.load_state_dict(torch.load(best_model_path))
-            folder_path = './test_results/' + setting + '/'
-            os.makedirs(folder_path, exist_ok=True)
-            plot_loss(train_losses, val_losses, name=os.path.join(folder_path, 'loss.pdf'))
-        
         time_train = time.time() - time_now
         peak_mem = torch.cuda.max_memory_allocated() / 1024 / 1024  # MiB
         logging.info(f"[TIME] Training time: {time_train:.2f}s, Peak GPU memory used: {peak_mem:.2f} MB")
 
         # return self.model
         return vali_loss
+
 
 
 
@@ -499,7 +493,7 @@ class Exp_Main(Exp_Basic):
         test_data, test_loader = self._get_data(flag='test')
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting + ".pth")))
 
         preds = []
         trues = []
@@ -588,10 +582,15 @@ class Exp_Main(Exp_Basic):
             folder_path = './results/' + setting + '/'
             os.makedirs(folder_path, exist_ok=True)
 
-            mae, mse, rmse, mape, mspe, nse = metric(preds, trues)
-            print(f'TESTING: mse:{mse:.4f} | mae:{mae:.4f} | dtw:{dtw} | nse:{nse:.4f}')
+            mae0, mse0, rmse0, mape0, mspe0, nse0 = metric(preds[...,0], trues[...,0])
+            print(f'TESTING LOWER: mse:{mse0:.4f} | mae:{mae0:.4f} | dtw:{dtw} | nse:{nse0:.4f}')
             
-            np.save(os.path.join(folder_path, 'metrics.npy'), np.array([mae, mse, rmse, mape, mspe, nse]))
+            mae1, mse1, rmse1, mape1, mspe1, nse1 = metric(preds[...,1], trues[...,1])
+            print(f'TESTING HIGHER mse:{mse1:.4f} | mae:{mae1:.4f} | dtw:{dtw} | nse:{nse1:.4f}')
+            
+            np.save(os.path.join(folder_path, 'metrics_Low.npy'), np.array([mae0, mse0, rmse0, mape0, mspe0, nse0]))
+            np.save(os.path.join(folder_path, 'metrics_High.npy'), np.array([mae1, mse1, rmse1, mape1, mspe1, nse1]))
+
             np.save(os.path.join(folder_path, 'pred.npy'), preds)
             np.save(os.path.join(folder_path, 'true.npy'), trues)
 
